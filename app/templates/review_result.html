@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set title = "审稿结果" %}
+{% block content %}
+<section class="card">
+    <div class="result-header">
+        <div>
+            <h1>{{ report.title }} · AI审稿结果</h1>
+            <p>{{ report.summary }}</p>
+        </div>
+        <div class="score-box">
+            <strong>{{ report.overall_score }}</strong>
+            <span>{{ report.readiness }}</span>
+        </div>
+    </div>
+    <p class="muted">消耗 {{ "%.2f"|format(run.total_price_cents / 100) }} 元，{{ run.billed_chars }} 字符，模型：{{ report.model_alias }} / {{ report.provider_name }}</p>
+</section>
+
+<section class="grid two">
+    <article class="card">
+        <h2>分项评分</h2>
+        <ul class="issues">
+            {% for item in report.dimension_scores %}
+            <li><strong>{{ item.name }}</strong>：{{ item.score }} 分 · {{ item.rationale }}</li>
+            {% endfor %}
+        </ul>
+    </article>
+    <article class="card">
+        <h2>修改优先级</h2>
+        <ul class="issues">
+            {% for item in report.priorities %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </article>
+</section>
+
+<section class="grid two">
+    <article class="card">
+        <h2>亮点</h2>
+        <ul class="issues">
+            {% for item in report.strengths %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </article>
+    <article class="card">
+        <h2>建议结构</h2>
+        <ol class="issues ordered">
+            {% for item in report.revised_outline %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ol>
+    </article>
+</section>
+
+<section class="card">
+    <h2>问题清单</h2>
+    <div class="issues">
+        {% for issue in report.issues %}
+        <article class="issue-item severity-{% if issue.severity == '高' %}high{% elif issue.severity == '中' %}medium{% else %}low{% endif %}">
+            <div class="issue-top"><strong>{{ issue.category }}</strong><span>{{ issue.severity }}风险 · 第 {{ issue.paragraph_index }} 段</span></div>
+            <p><strong>发现：</strong>{{ issue.finding }}</p>
+            <p><strong>摘录：</strong>{{ issue.excerpt }}</p>
+            <p><strong>原因：</strong>{{ issue.rationale }}</p>
+            <p><strong>建议：</strong>{{ issue.recommendation }}</p>
+            {% if issue.tags %}<p class="tags">{{ issue.tags | join(" / ") }}</p>{% endif %}
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

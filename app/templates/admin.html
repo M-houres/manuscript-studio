@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% set title = "管理台" %}
+{% block content %}
+<section class="card">
+    <div class="grid two">
+        <div>
+            <h1>管理台</h1>
+            <p class="muted">内测管理入口：模型配置与账户额度。</p>
+            {% if error %}<p class="notice error">{{ error }}</p>{% endif %}
+            {% if notice %}<p class="notice success">{{ notice }}</p>{% endif %}
+        </div>
+        <div class="card flat">
+            <p class="muted">模型配置为 OpenAI 兼容接口，可接入国内主流模型。</p>
+            <p class="muted">保存后立即生效，无需重启。</p>
+        </div>
+    </div>
+</section>
+
+<section class="grid two">
+    <article class="card">
+        <h2>模型配置列表</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>别名</th>
+                    <th>模型</th>
+                    <th>Base URL</th>
+                    <th>来源</th>
+                    <th>状态</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in model_rows %}
+                <tr>
+                    <td>{{ item.alias }}</td>
+                    <td>{{ item.model }}</td>
+                    <td class="muted">{{ item.base_url }}</td>
+                    <td><span class="pill">{{ item.source }}</span></td>
+                    <td>{{ "启用" if item.enabled else "停用" }}{% if not item.api_key_set %} · 未配置 Key{% endif %}</td>
+                    <td><a href="/admin?alias={{ item.alias }}">编辑</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <form method="post" action="/admin/models/reset" class="form-grid full" style="margin-top:16px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>重置配置（回退环境变量）
+                <input type="text" name="alias" placeholder="输入别名，例如 review_deep">
+            </label>
+            <div class="button-row">
+                <button class="ghost" type="submit">重置</button>
+            </div>
+        </form>
+    </article>
+
+    <article class="card">
+        <h2>新增/更新模型</h2>
+        <form method="post" action="/admin/models/save" class="form-grid full">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>别名
+                <input type="text" name="alias" value="{{ edit_model.alias if edit_model else '' }}" placeholder="例如 review_deep">
+            </label>
+            <label>提供方
+                <input type="text" name="provider_name" value="{{ edit_model.provider_name if edit_model else 'custom' }}" placeholder="例如 qwen / deepseek">
+            </label>
+            <label>模型名称
+                <input type="text" name="model" value="{{ edit_model.model if edit_model else '' }}" placeholder="例如 qwen-plus / deepseek-chat">
+            </label>
+            <label>Base URL
+                <input type="text" name="base_url" value="{{ edit_model.base_url if edit_model else '' }}" placeholder="兼容 OpenAI 的 API 地址">
+            </label>
+            <label>API Key（留空则保留原值）
+                <input type="password" name="api_key" placeholder="sk-***">
+            </label>
+            <label>温度
+                <input type="number" name="temperature" step="0.05" value="{{ edit_model.temperature if edit_model else 0.2 }}">
+            </label>
+            <label>最大 Tokens
+                <input type="number" name="max_tokens" value="{{ edit_model.max_tokens if edit_model else 2000 }}">
+            </label>
+            <label>说明
+                <input type="text" name="description" value="{{ edit_model.description if edit_model else '' }}" placeholder="可选">
+            </label>
+            <label>
+                <input type="checkbox" name="enabled" {% if edit_model and edit_model.enabled %}checked{% endif %}>
+                启用该模型
+            </label>
+            <div class="button-row">
+                <button class="primary" type="submit">保存配置</button>
+                <a class="ghost-link" href="/admin">清空</a>
+            </div>
+        </form>
+        <div class="card flat" style="margin-top:16px;">
+            <h3>常用 Base URL</h3>
+            <ul class="issues">
+                {% for item in presets %}
+                <li>{{ item.name }}：{{ item.base_url }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </article>
+</section>
+
+<section class="grid two">
+    <article class="card">
+        <h2>用户余额调整</h2>
+        <form method="post" action="/admin/wallets/adjust" class="form-grid full">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>用户邮箱
+                <input type="email" name="email" placeholder="user@example.com" required>
+            </label>
+            <label>调整金额（元）
+                <input type="number" name="amount_yuan" step="0.01" placeholder="正数增加，负数扣减" required>
+            </label>
+            <label>备注
+                <input type="text" name="reason" placeholder="例如：内测赠送 / 手工扣减">
+            </label>
+            <div class="button-row">
+                <button class="primary" type="submit">提交调整</button>
+            </div>
+        </form>
+        <p class="muted">建议先通过“注册赠送额度”或手动调整方式完成内测赠送。</p>
+    </article>
+
+    <article class="card">
+        <h2>最新用户</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>邮箱</th>
+                    <th>姓名</th>
+                    <th>余额</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in users %}
+                <tr>
+                    <td>{{ item.id }}</td>
+                    <td>{{ item.email }}</td>
+                    <td>{{ item.name }}</td>
+                    <td>{{ "%.2f"|format(item.balance_cents / 100) }} 元</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </article>
+</section>
+{% endblock %}

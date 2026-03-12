@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero card">
+    <div>
+        <h1>让审稿与降重走向产品级交付</h1>
+        <p>聚焦中文稿件的结构、语言与风险诊断，结合原创性优化与资产管理，形成可复用的写作工作台。</p>
+        <div class="hero-actions">
+            <a class="primary-link" href="/audit">开始 AI 审稿</a>
+            <a class="ghost-link" href="/review">降重降 AI</a>
+        </div>
+        <p class="muted">审稿：{{ review_price }} 元 / 1000 字符，优化：{{ rewrite_price }} 元 / 1000 字符。</p>
+    </div>
+    {% if user and wallet %}
+    <div class="kpi">
+        <div class="kpi-item">
+            <span class="muted">账户余额</span>
+            <strong>{{ "%.2f"|format(wallet.balance_cents / 100) }} 元</strong>
+        </div>
+        <div class="kpi-item">
+            <span class="muted">累计充值</span>
+            <strong>{{ "%.2f"|format(wallet.total_recharged_cents / 100) }} 元</strong>
+        </div>
+        <div class="kpi-item">
+            <span class="muted">累计消耗</span>
+            <strong>{{ "%.2f"|format(wallet.total_spent_cents / 100) }} 元</strong>
+        </div>
+    </div>
+    {% else %}
+    <div class="card flat">
+        <p class="muted">登录后可使用完整功能与历史记录。</p>
+        <div class="hero-actions">
+            <a class="primary-link" href="/register">注册试用</a>
+            <a class="ghost-link" href="/login">登录</a>
+        </div>
+    </div>
+    {% endif %}
+</section>
+
+{% if request.query_params.get("error") %}
+<p class="notice error">{{ request.query_params.get("error") }}</p>
+{% endif %}
+{% if request.query_params.get("notice") %}
+<p class="notice success">{{ request.query_params.get("notice") }}</p>
+{% endif %}
+
+<section class="grid three">
+    <article class="feature-card">
+        <span class="tag">核心</span>
+        <h3>AI 审稿</h3>
+        <p>结构、语言、学术与风险维度评分，输出可执行修改建议。</p>
+        <a href="/audit">进入审稿</a>
+    </article>
+    <article class="feature-card">
+        <span class="tag">核心</span>
+        <h3>降重降 AI</h3>
+        <p>保持原意，优化表述与可读性，生成差异说明。</p>
+        <a href="/review">进入优化</a>
+    </article>
+    <article class="feature-card">
+        <span class="tag">内测</span>
+        <h3>AIGC 检测</h3>
+        <p>检测文本中 AI 生成特征，输出风险提示。</p>
+        <a href="/aigc-detect">查看方案</a>
+    </article>
+</section>
+
+<section class="grid two">
+    <article class="card">
+        <h2>快速入口</h2>
+        <div class="grid two">
+            <a class="card flat" href="/assets">
+                <strong>我的资产</strong>
+                <p class="muted">文档与历史任务集中管理</p>
+            </a>
+            <a class="card flat" href="/history">
+                <strong>历史任务</strong>
+                <p class="muted">查看最近审稿与优化记录</p>
+            </a>
+            <a class="card flat" href="/proposal">
+                <strong>开题报告</strong>
+                <p class="muted">结构化输出研究方案</p>
+            </a>
+            <a class="card flat" href="/editor">
+                <strong>AI 编辑器</strong>
+                <p class="muted">协作式写作与优化工作台</p>
+            </a>
+        </div>
+    </article>
+    <article class="card">
+        <h2>最近记录</h2>
+        {% if runs %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>类型</th>
+                    <th>模型</th>
+                    <th>消耗</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr>
+                    <td>{{ run.kind }}</td>
+                    <td>{{ run.model_alias }}</td>
+                    <td>{{ "%.2f"|format(run.total_price_cents / 100) }} 元</td>
+                    <td><a href="/runs/{{ run.run_no }}">查看</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="muted">暂无记录，开始一次审稿或优化。</p>
+        {% endif %}
+    </article>
+</section>
+{% endblock %}

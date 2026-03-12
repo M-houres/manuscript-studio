@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    <div class="grid two">
+        <div>
+            <h1>我的资产</h1>
+            <p class="muted">管理上传文档与审稿、优化的原始稿件。</p>
+        </div>
+        <div class="card flat">
+            <p class="muted">内测阶段仅展示文档列表，后续将支持分类、标签与下载。</p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    {% if documents %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>标题</th>
+                <th>来源</th>
+                <th>字数</th>
+                <th>创建时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in documents %}
+            <tr>
+                <td>{{ doc.title }}</td>
+                <td>{{ doc.source_name }}</td>
+                <td>{{ doc.char_count }}</td>
+                <td>{{ doc.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">暂无文档，请先进行一次审稿或优化。</p>
+    {% endif %}
+</section>
+
+<section class="card flat">
+    <div class="button-row">
+        {% if page > 1 %}
+        <a class="ghost-link" href="/assets?page={{ page - 1 }}">上一页</a>
+        {% endif %}
+        {% if page < total_pages %}
+        <a class="ghost-link" href="/assets?page={{ page + 1 }}">下一页</a>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

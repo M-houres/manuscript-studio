@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% set title = "注册" %}
+{% block content %}
+<section class="card">
+    <h1>注册</h1>
+    {% if error %}<p class="notice error">{{ error }}</p>{% endif %}
+    <form method="post" action="/register" class="form-grid full">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>邮箱<input type="email" name="email" required></label>
+        <label>姓名<input type="text" name="name" required></label>
+        <label>密码<input type="password" name="password" required minlength="6"></label>
+        <div class="button-row">
+            <button class="primary" type="submit">注册并进入工作台</button>
+            <a class="ghost-link" href="/login">已有账号？登录</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

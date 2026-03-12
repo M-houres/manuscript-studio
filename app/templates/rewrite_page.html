@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    <div class="grid two">
+        <div>
+            <h1>降重降 AI</h1>
+            <p class="muted">保留原意，提升原创性与可读性，并输出差异说明。</p>
+            <div class="steps">
+                <div class="step">1. 输入文稿</div>
+                <div class="step">2. 选择模式</div>
+                <div class="step">3. 生成优化</div>
+                <div class="step">4. 对比改动</div>
+            </div>
+        </div>
+        <div class="card flat">
+            <p class="muted">支持轻改、标准、深改三档风格。</p>
+            <p class="muted">模型未配置时自动回退本地优化。</p>
+            <p class="muted">计费：{{ rewrite_price }} 元 / 1000 字符。</p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    {% if user %}
+    <form method="post" action="/review" enctype="multipart/form-data" class="form-grid full">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>标题
+            <input type="text" name="title" placeholder="例如：人工智能赋能高校教学评价">
+        </label>
+        <label>文稿正文
+            <textarea name="text" placeholder="粘贴正文，或直接上传 .docx"></textarea>
+        </label>
+        <label>上传 .docx
+            <input type="file" name="upload" accept=".docx,.txt">
+        </label>
+        <label>优化模式
+            <select name="mode">
+                <option value="light">轻改</option>
+                <option value="standard" selected>标准</option>
+                <option value="deep">深改</option>
+            </select>
+        </label>
+        <label>模型档位
+            <select name="model_alias">
+                {% for profile in profiles if profile.alias.startswith("rewrite") %}
+                <option value="{{ profile.alias }}">{{ profile.alias }} · {{ profile.provider_name }}{% if not profile.enabled %}（未配置，将回退本地优化）{% endif %}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <div class="button-row">
+            <button class="primary" type="submit">开始优化</button>
+            <a class="ghost-link" href="/history">查看历史记录</a>
+        </div>
+    </form>
+    {% else %}
+    <p class="muted">请先登录后使用优化功能。</p>
+    <div class="button-row">
+        <a class="primary-link" href="/login">登录</a>
+        <a class="ghost-link" href="/register">注册</a>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

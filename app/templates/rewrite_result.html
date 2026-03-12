@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% set title = "优化结果" %}
+{% block content %}
+<section class="card">
+    <div class="result-header">
+        <div>
+            <h1>{{ result.title }} · 原创性优化结果</h1>
+            <p>{{ result.summary }}</p>
+        </div>
+        <div class="score-box">
+            <strong>{{ result.mode }}</strong>
+            <span>{{ result.model_alias }} / {{ result.provider_name }}</span>
+        </div>
+    </div>
+    <p class="muted">消耗 {{ "%.2f"|format(run.total_price_cents / 100) }} 元，{{ run.billed_chars }} 字符</p>
+</section>
+
+<section class="grid two">
+    <article class="card">
+        <h2>优化策略</h2>
+        <ul class="issues">
+            {% for item in result.strategy_notes %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </article>
+    <article class="card">
+        <h2>引用补充提示</h2>
+        <ul class="issues">
+            {% for item in result.citation_prompts %}
+            <li>{{ item }}</li>
+            {% else %}
+            <li>当前没有明显的来源补充提示。</li>
+            {% endfor %}
+        </ul>
+    </article>
+</section>
+
+<section class="grid two">
+    <article class="card">
+        <h2>优化后文本</h2>
+        <pre class="output-text">{{ result.optimized_text }}</pre>
+    </article>
+    <article class="card">
+        <h2>Diff 说明</h2>
+        <div class="issues">
+            {% for block in result.diff_blocks %}
+            <article class="issue-item">
+                <div class="issue-top"><strong>{{ block.change_type }}</strong><span>{{ block.explanation }}</span></div>
+                <p><strong>原文：</strong>{{ block.original }}</p>
+                <p><strong>改写：</strong>{{ block.updated }}</p>
+            </article>
+            {% endfor %}
+        </div>
+    </article>
+</section>
+{% endblock %}

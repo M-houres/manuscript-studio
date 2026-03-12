@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title or "Manuscript Studio" }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="app-shell">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <a class="brand" href="/">SpeedAI</a>
+            <span class="brand-sub">Manuscript Studio</span>
+        </div>
+        <nav class="nav">
+            {% for item in nav_items %}
+            {% set is_active = (item.match == "exact" and active_path == item.path) or (item.match == "prefix" and active_path.startswith(item.path) and item.path != "/") %}
+            <a class="nav-item{% if is_active %} active{% endif %}" href="{{ item.path }}">
+                <span class="nav-icon">{{ item.icon }}</span>
+                <span class="nav-label">{{ item.label }}</span>
+                {% if item.key in ["aigc", "literature", "proposal", "generate", "format", "editor", "ppt"] %}
+                <span class="nav-badge">规划中</span>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </nav>
+        <div class="sidebar-footer">
+            <div class="sidebar-meta">
+                <span class="meta-title">当前版本</span>
+                <strong class="meta-value">内测通道</strong>
+            </div>
+            <div class="sidebar-meta">
+                <span class="meta-title">服务状态</span>
+                <strong class="meta-value ok">运行中</strong>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main">
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="icon-button menu-btn" id="navToggle" type="button" aria-label="Toggle navigation">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div class="page-title">
+                    <span class="title-muted">SpeedAI · 文稿工作台</span>
+                    <strong>{{ title or "首页" }}</strong>
+                </div>
+            </div>
+            <div class="topbar-right">
+                {% if user and wallet %}
+                <div class="wallet-pill">
+                    <span>余额</span>
+                    <strong>{{ "%.2f"|format(wallet.balance_cents / 100) }} 元</strong>
+                </div>
+                {% endif %}
+                {% if user %}
+                <div class="user-pill">
+                    <span class="user-name">{{ user.name }}</span>
+                    <form method="post" action="/logout" style="margin:0;display:inline-flex;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="ghost">退出</button>
+                    </form>
+                </div>
+                {% if is_admin %}
+                <a class="ghost-link" href="/admin">管理台</a>
+                {% endif %}
+                {% else %}
+                <a class="ghost-link" href="/login">登录</a>
+                <a class="primary-link" href="/register">注册</a>
+                {% endif %}
+            </div>
+        </header>
+
+        <main class="page">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="footer">
+            <span>© 2026 SpeedAI · Manuscript Studio</span>
+            <span><a href="/privacy">隐私政策</a> · <a href="/terms">用户协议</a></span>
+        </footer>
+    </div>
+
+    <div class="overlay" id="navOverlay"></div>
+    <button class="floating-cta" type="button">
+        <span>签到/福利</span>
+        <small>内测权益</small>
+    </button>
+
+    <script>const toggle=document.getElementById("navToggle");const overlay=document.getElementById("navOverlay");if(toggle&&overlay){const closeNav=()=>document.body.classList.remove("nav-open");toggle.addEventListener("click",()=>document.body.classList.toggle("nav-open"));overlay.addEventListener("click",closeNav);}</script>
+</body>
+</html>

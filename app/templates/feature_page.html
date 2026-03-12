@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    <div class="grid two">
+        <div>
+            <h1>{{ title }}</h1>
+            <p class="muted">{{ subtitle }}</p>
+            <div class="steps">
+                {% for step in steps %}
+                <div class="step">{{ step }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card flat">
+            <span class="badge">{{ badge }}</span>
+            <p class="muted">该模块正在内测设计阶段，接口已预留，后续将逐步开放。</p>
+            <p class="muted">如需优先开通，请联系管理员。</p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <form class="form-grid full">
+        {% for field in fields %}
+        <label>{{ field.label }}
+            {% if field.kind == "textarea" %}
+            <textarea disabled placeholder="{{ field.placeholder }}"></textarea>
+            {% elif field.kind == "select" %}
+            <select disabled>
+                {% for option in field.options %}
+                <option>{{ option }}</option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <input type="text" disabled placeholder="{{ field.placeholder }}">
+            {% endif %}
+        </label>
+        {% if field.hint %}
+        <span class="muted">{{ field.hint }}</span>
+        {% endif %}
+        {% endfor %}
+        <div class="button-row">
+            <button class="ghost" type="button" disabled>即将开放</button>
+            <a class="ghost-link" href="/history">查看历史记录</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

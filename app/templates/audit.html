@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    <div class="grid two">
+        <div>
+            <h1>AI 审稿</h1>
+            <p class="muted">从结构、语言、学术与风险维度输出可执行修改建议。</p>
+            <div class="steps">
+                <div class="step">1. 输入文稿</div>
+                <div class="step">2. 选择模型</div>
+                <div class="step">3. 生成审稿</div>
+                <div class="step">4. 查看报告</div>
+            </div>
+        </div>
+        <div class="card flat">
+            <p class="muted">建议 2 万字以内文稿，支持 .docx 与纯文本。</p>
+            <p class="muted">模型未配置时自动回退本地审稿。</p>
+            <p class="muted">计费：{{ review_price }} 元 / 1000 字符。</p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    {% if user %}
+    <form method="post" action="/audit" enctype="multipart/form-data" class="form-grid full">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>标题
+            <input type="text" name="title" placeholder="例如：乡村教育数字化转型研究">
+        </label>
+        <label>文稿正文
+            <textarea name="text" placeholder="粘贴正文，或直接上传 .docx"></textarea>
+        </label>
+        <label>上传 .docx
+            <input type="file" name="upload" accept=".docx,.txt">
+        </label>
+        <label>模型档位
+            <select name="model_alias">
+                {% for profile in profiles if profile.alias.startswith("review") %}
+                <option value="{{ profile.alias }}">{{ profile.alias }} · {{ profile.provider_name }}{% if not profile.enabled %}（未配置，将回退本地审稿）{% endif %}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <div class="button-row">
+            <button class="primary" type="submit">开始审稿</button>
+            <a class="ghost-link" href="/history">查看历史记录</a>
+        </div>
+    </form>
+    {% else %}
+    <p class="muted">请先登录后使用审稿功能。</p>
+    <div class="button-row">
+        <a class="primary-link" href="/login">登录</a>
+        <a class="ghost-link" href="/register">注册</a>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
