@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    <h1>{{ title }}</h1>
+    <p class="muted">{{ summary }}</p>
+    <div class="card flat">
+        <p class="muted">建议通过以下方式联系：</p>
+        <ul class="issues">
+            <li>企业微信或飞书群</li>
+            <li>管理员邮箱</li>
+            <li>站内消息（后续开放）</li>
+        </ul>
+    </div>
+</section>
+{% endblock %}

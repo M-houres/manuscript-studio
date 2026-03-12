@@ -207,4 +207,32 @@
         </tbody>
     </table>
 </section>
+
+<section class="card">
+    <h2>管理员操作审计</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>时间</th>
+                <th>管理员</th>
+                <th>动作</th>
+                <th>目标</th>
+                <th>金额</th>
+                <th>备注</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in audits %}
+            <tr>
+                <td>{{ item.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+                <td>{{ item.actor_email }}</td>
+                <td>{{ item.action }}</td>
+                <td>{{ item.target }}</td>
+                <td>{{ "%.2f"|format(item.amount_cents / 100) }} 元</td>
+                <td class="muted">{{ item.note or "-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
 {% endblock %}

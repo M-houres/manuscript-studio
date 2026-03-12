@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import secrets
 import time
-from datetime import datetime, timedelta
 from collections import defaultdict, deque
+from datetime import datetime, timedelta
+from io import StringIO
 from math import ceil
 from typing import Deque
 from urllib.parse import quote
@@ -525,6 +527,39 @@ def history_page(request: Request, session: Session = Depends(get_session)) -> H
     )
 
 
+@app.get('/history/export')
+def export_history(request: Request, session: Session = Depends(get_session)) -> Response:
+    user = require_user(request, session)
+    kind_filter = request.query_params.get("kind", "all")
+    model_filter = request.query_params.get("model", "all")
+    base_query = session.query(AnalysisRun).filter(AnalysisRun.user_id == user.id)
+    if kind_filter in {"review", "rewrite"}:
+        base_query = base_query.filter(AnalysisRun.kind == kind_filter)
+    if model_filter and model_filter != "all":
+        base_query = base_query.filter(AnalysisRun.model_alias == model_filter)
+    runs = base_query.order_by(AnalysisRun.created_at.desc()).limit(500).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["run_no", "kind", "model_alias", "provider", "total_price_yuan", "billed_chars", "created_at"])
+    for run in runs:
+        writer.writerow([
+            run.run_no,
+            run.kind,
+            run.model_alias,
+            run.provider_name,
+            f"{run.total_price_cents / 100:.2f}",
+            run.billed_chars,
+            run.created_at.strftime("%Y-%m-%d %H:%M"),
+        ])
+    filename = f"history_{user.id}.csv"
+    return Response(
+        output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @app.get('/privacy', response_class=HTMLResponse)
 def privacy_page(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -623,6 +658,7 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
         {"name": "01.AI（Yi）", "base_url": "https://api.lingyiwanwu.com/v1"},
     ]
     logs = session.query(ModelCallLog).order_by(ModelCallLog.created_at.desc()).limit(50).all()
+    audits = session.query(AdminAudit).order_by(AdminAudit.created_at.desc()).limit(50).all()
     since = datetime.utcnow() - timedelta(hours=24)
     success_24h = session.query(ModelCallLog).filter(ModelCallLog.created_at >= since, ModelCallLog.success == True).count()
     fail_24h = session.query(ModelCallLog).filter(ModelCallLog.created_at >= since, ModelCallLog.success == False).count()
@@ -639,10 +675,24 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
             users=user_rows,
             presets=presets,
             logs=logs,
+            audits=audits,
             success_24h=success_24h,
             fail_24h=fail_24h,
             error=request.query_params.get("error"),
             notice=request.query_params.get("notice"),
+        ),
+    )
+
+
+@app.get('/contact', response_class=HTMLResponse)
+def contact_page(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "contact.html",
+        template_context(
+            request,
+            **page_context(request, session),
+            title="联系与支持",
+            summary="内测期间如需开通额度、反馈问题或获取资料，请联系管理员。",
         ),
     )
 
