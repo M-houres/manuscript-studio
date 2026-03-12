@@ -35,6 +35,7 @@ class Settings:
     rewrite_price_per_1k_chars_cents: int = int(os.getenv("REWRITE_PRICE_PER_1K_CHARS_CENTS", "199"))
     combo_discount_percent: int = int(os.getenv("COMBO_DISCOUNT_PERCENT", "10"))
     signup_bonus_cents: int = int(os.getenv("SIGNUP_BONUS_CENTS", "0"))
+    internal_bonus_cents: int = int(os.getenv("INTERNAL_BONUS_CENTS", "0"))
 
     default_review_model_alias: str = os.getenv("DEFAULT_REVIEW_MODEL_ALIAS", "review_deep")
     default_rewrite_model_alias: str = os.getenv("DEFAULT_REWRITE_MODEL_ALIAS", "rewrite_quality")

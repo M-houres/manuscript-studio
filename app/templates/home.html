@@ -25,6 +25,12 @@
             <strong>{{ "%.2f"|format(wallet.total_spent_cents / 100) }} 元</strong>
         </div>
     </div>
+    {% if internal_bonus_yuan %}
+    <form method="post" action="/bonus/claim" class="button-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="ghost" type="submit">领取内测额度 {{ "%.2f"|format(internal_bonus_yuan) }} 元</button>
+    </form>
+    {% endif %}
     {% else %}
     <div class="card flat">
         <p class="muted">登录后可使用完整功能与历史记录。</p>

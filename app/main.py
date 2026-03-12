@@ -22,7 +22,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .config import BASE_DIR, settings
 from .database import get_session, init_db
-from .models import AnalysisRun, DocumentRecord, ModelConfig, User
+from .models import AnalysisRun, BonusClaim, DocumentRecord, ModelCallLog, ModelConfig, User
 from .security import hash_password, verify_password
 from .services.billing import billing_service
 from .services.documents import document_service
@@ -244,6 +244,7 @@ def page_context(request: Request, session: Session | None = None) -> dict:
         "payments_enabled": bool(providers),
         "review_price": money(settings.review_price_per_1k_chars_cents),
         "rewrite_price": money(settings.rewrite_price_per_1k_chars_cents),
+        "internal_bonus_yuan": settings.internal_bonus_cents / 100 if settings.internal_bonus_cents else 0,
         "is_admin": is_admin_user(user),
     }
 
@@ -584,6 +585,7 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
         {"name": "Baichuan", "base_url": "https://api.baichuan-ai.com/v1"},
         {"name": "01.AI（Yi）", "base_url": "https://api.lingyiwanwu.com/v1"},
     ]
+    logs = session.query(ModelCallLog).order_by(ModelCallLog.created_at.desc()).limit(50).all()
 
     return templates.TemplateResponse(
         "admin.html",
@@ -596,6 +598,7 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
             edit_model=edit_model,
             users=user_rows,
             presets=presets,
+            logs=logs,
             error=request.query_params.get("error"),
             notice=request.query_params.get("notice"),
         ),
@@ -696,6 +699,47 @@ def admin_adjust_wallet(
     except ValueError:
         return redirect_admin("余额不足，无法扣减。", kind="error")
     return redirect_admin("已扣减余额。")
+
+
+@app.post('/admin/users/reset_password')
+def admin_reset_password(
+    request: Request,
+    email: str = Form(...),
+    new_password: str = Form(...),
+    csrf_token: str = Form(...),
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    verify_csrf(request, csrf_token)
+    require_admin(request, session)
+    target = session.query(User).filter(User.email == email.strip()).one_or_none()
+    if not target:
+        return redirect_admin("未找到该邮箱用户。", kind="error")
+    if len(new_password.strip()) < 6:
+        return redirect_admin("新密码至少 6 位。", kind="error")
+    target.password_hash = hash_password(new_password.strip())
+    session.add(target)
+    session.commit()
+    return redirect_admin("密码已重置。")
+
+
+@app.post('/bonus/claim')
+def claim_bonus(
+    request: Request,
+    csrf_token: str = Form(...),
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    verify_csrf(request, csrf_token)
+    user = require_user(request, session)
+    if settings.internal_bonus_cents <= 0:
+        return redirect_notice("内测赠送已关闭")
+    existing = session.query(BonusClaim).filter(BonusClaim.user_id == user.id).one_or_none()
+    if existing:
+        return redirect_notice("已领取过内测额度")
+    wallet = billing_service.ensure_wallet(session, user.id)
+    billing_service.credit_wallet(session, wallet, settings.internal_bonus_cents, "内测领取")
+    session.add(BonusClaim(user_id=user.id, amount_cents=settings.internal_bonus_cents))
+    session.commit()
+    return redirect_notice("内测额度领取成功")
 
 @app.get('/register', response_class=HTMLResponse)
 def register_page(request: Request) -> HTMLResponse:

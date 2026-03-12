@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -25,6 +25,28 @@ class User(TimestampMixin, Base):
     documents: Mapped[list["DocumentRecord"]] = relationship(back_populates="user")
     runs: Mapped[list["AnalysisRun"]] = relationship(back_populates="user")
     payment_orders: Mapped[list["PaymentOrder"]] = relationship(back_populates="user")
+
+
+class BonusClaim(TimestampMixin, Base):
+    __tablename__ = "bonus_claims"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_bonus_claim_user_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    note: Mapped[str] = mapped_column(String(255), default="内测领取")
+
+
+class ModelCallLog(TimestampMixin, Base):
+    __tablename__ = "model_call_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    alias: Mapped[str] = mapped_column(String(64), index=True)
+    provider_name: Mapped[str] = mapped_column(String(64))
+    model: Mapped[str] = mapped_column(String(128))
+    success: Mapped[bool] = mapped_column(Boolean, default=True)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class ModelConfig(TimestampMixin, Base):

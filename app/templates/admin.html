@@ -12,6 +12,9 @@
         <div class="card flat">
             <p class="muted">模型配置为 OpenAI 兼容接口，可接入国内主流模型。</p>
             <p class="muted">保存后立即生效，无需重启。</p>
+            {% if internal_bonus_yuan %}
+            <p class="muted">内测领取额度：{{ "%.2f"|format(internal_bonus_yuan) }} 元</p>
+            {% endif %}
         </div>
     </div>
 </section>
@@ -145,6 +148,46 @@
                 {% endfor %}
             </tbody>
         </table>
+        <form method="post" action="/admin/users/reset_password" class="form-grid full" style="margin-top:16px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>重置密码（管理员）
+                <input type="email" name="email" placeholder="user@example.com" required>
+            </label>
+            <label>新密码
+                <input type="text" name="new_password" placeholder="至少 6 位" required>
+            </label>
+            <div class="button-row">
+                <button class="ghost" type="submit">重置密码</button>
+            </div>
+        </form>
     </article>
+</section>
+
+<section class="card">
+    <h2>最近模型调用</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>时间</th>
+                <th>别名</th>
+                <th>模型</th>
+                <th>延迟</th>
+                <th>状态</th>
+                <th>错误</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in logs %}
+            <tr>
+                <td>{{ item.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+                <td>{{ item.alias }}</td>
+                <td>{{ item.model }}</td>
+                <td>{{ item.latency_ms }} ms</td>
+                <td>{{ "成功" if item.success else "失败" }}</td>
+                <td class="muted">{{ item.error_message or "-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </section>
 {% endblock %}
