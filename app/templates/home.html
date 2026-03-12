@@ -34,6 +34,12 @@
     <div class="button-row">
         <a class="ghost-link" href="/contact">联系客服/申请额度</a>
     </div>
+    {% if not email_verified %}
+    <form method="post" action="/verify/resend" class="button-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="ghost" type="submit">重新发送验证邮件</button>
+    </form>
+    {% endif %}
     {% else %}
     <div class="card flat">
         <p class="muted">登录后可使用完整功能与历史记录。</p>

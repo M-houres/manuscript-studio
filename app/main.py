@@ -5,6 +5,11 @@ import json
 import logging
 import secrets
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from email.message import EmailMessage
+import smtplib
+from logging import handlers
+from pathlib import Path
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from io import StringIO
@@ -26,7 +31,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .config import BASE_DIR, settings
 from .database import get_session, init_db
-from .models import AdminAudit, AnalysisRun, BonusClaim, DocumentRecord, ModelCallLog, ModelConfig, User, WalletAccount
+from .models import AdminAudit, AnalysisRun, BonusClaim, DocumentRecord, EmailToken, ModelCallLog, ModelConfig, User, WalletAccount
 from .security import hash_password, verify_password
 from .services.billing import billing_service
 from .services.documents import document_service
@@ -139,6 +144,24 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 logging.basicConfig(level=settings.log_level.upper())
 logger = logging.getLogger("manuscript-studio")
+if settings.log_file:
+    try:
+        log_path = Path(settings.log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = handlers.RotatingFileHandler(
+            log_path,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(settings.log_level.upper())
+        formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except Exception:
+        pass
+
+executor = ThreadPoolExecutor(max_workers=4)
 
 app = FastAPI(title=settings.app_name)
 if settings.allowed_hosts != ["*"]:
@@ -221,15 +244,32 @@ def require_user(request: Request, session: Session) -> User:
 def is_admin_user(user: User | None) -> bool:
     if not user:
         return False
-    if not settings.admin_emails:
+    admin_set = {email.lower() for email in settings.admin_emails}
+    super_set = {email.lower() for email in settings.super_admin_emails}
+    if not admin_set and not super_set:
         return False
-    return user.email.lower() in {email.lower() for email in settings.admin_emails}
+    return user.email.lower() in admin_set.union(super_set)
+
+
+def is_super_admin_user(user: User | None) -> bool:
+    if not user:
+        return False
+    if not settings.super_admin_emails:
+        return False
+    return user.email.lower() in {email.lower() for email in settings.super_admin_emails}
 
 
 def require_admin(request: Request, session: Session) -> User:
     user = require_user(request, session)
     if not is_admin_user(user):
         raise HTTPException(status_code=403, detail="Admin access required.")
+    return user
+
+
+def require_super_admin(request: Request, session: Session) -> User:
+    user = require_user(request, session)
+    if not is_super_admin_user(user):
+        raise HTTPException(status_code=403, detail="Super admin access required.")
     return user
 
 
@@ -284,6 +324,46 @@ def log_admin_action(
     ))
 
 
+def _run_with_timeout(fn, timeout_seconds: int):
+    future = executor.submit(fn)
+    return future.result(timeout=timeout_seconds)
+
+
+def _smtp_ready() -> bool:
+    return bool(settings.smtp_host and settings.smtp_sender)
+
+
+def _send_email(to_address: str, subject: str, content: str) -> None:
+    if not _smtp_ready():
+        raise RuntimeError("SMTP not configured")
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = settings.smtp_sender
+    message["To"] = to_address
+    message.set_content(content)
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+        if settings.smtp_use_tls:
+            server.starttls()
+        if settings.smtp_user:
+            server.login(settings.smtp_user, settings.smtp_password)
+        server.send_message(message)
+
+
+def _create_email_token(session: Session, user: User, purpose: str, expires_in_minutes: int = 30) -> EmailToken:
+    token = secrets.token_urlsafe(24)
+    expires_at = datetime.utcnow() + timedelta(minutes=expires_in_minutes)
+    email_token = EmailToken(
+        user_id=user.id,
+        token=token,
+        purpose=purpose,
+        expires_at=expires_at,
+    )
+    session.add(email_token)
+    session.commit()
+    session.refresh(email_token)
+    return email_token
+
+
 def money(cents: int) -> str:
     return f"{cents / 100:.2f}"
 
@@ -302,6 +382,8 @@ def page_context(request: Request, session: Session | None = None) -> dict:
         "internal_bonus_yuan": settings.internal_bonus_cents / 100 if settings.internal_bonus_cents else 0,
         "max_upload_mb": settings.max_upload_mb,
         "is_admin": is_admin_user(user),
+        "is_super_admin": is_super_admin_user(user),
+        "email_verified": bool(user.email_verified) if user else False,
     }
 
 
@@ -790,6 +872,13 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
         .scalar()
         or 0
     )
+    avg_latency_24h = (
+        session.query(func.avg(ModelCallLog.latency_ms))
+        .filter(ModelCallLog.created_at >= since, ModelCallLog.success == True)
+        .scalar()
+        or 0
+    )
+    avg_latency_all = session.query(func.avg(ModelCallLog.latency_ms)).scalar() or 0
 
     return templates.TemplateResponse(
         "admin.html",
@@ -811,6 +900,8 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
             total_runs=total_runs,
             total_revenue=total_revenue_cents / 100,
             revenue_24h=revenue_24h_cents / 100,
+            avg_latency_24h=int(avg_latency_24h),
+            avg_latency_all=int(avg_latency_all),
             error=request.query_params.get("error"),
             notice=request.query_params.get("notice"),
         ),
@@ -846,7 +937,7 @@ def admin_save_model(
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
     verify_csrf(request, csrf_token)
-    user = require_admin(request, session)
+    user = require_super_admin(request, session)
     alias = alias.strip()
     if not alias or not model.strip() or not base_url.strip():
         return redirect_admin("请填写别名、模型与 Base URL。", kind="error")
@@ -920,7 +1011,7 @@ def admin_reset_model(
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
     verify_csrf(request, csrf_token)
-    user = require_admin(request, session)
+    user = require_super_admin(request, session)
     config = session.query(ModelConfig).filter(ModelConfig.alias == alias).one_or_none()
     if config:
         session.delete(config)
@@ -945,7 +1036,7 @@ def admin_adjust_wallet(
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
     verify_csrf(request, csrf_token)
-    user = require_admin(request, session)
+    user = require_super_admin(request, session)
     target = session.query(User).filter(User.email == email.strip()).one_or_none()
     if not target:
         return redirect_admin("未找到该邮箱用户。", kind="error")
@@ -991,7 +1082,7 @@ def admin_reset_password(
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
     verify_csrf(request, csrf_token)
-    user = require_admin(request, session)
+    user = require_super_admin(request, session)
     target = session.query(User).filter(User.email == email.strip()).one_or_none()
     if not target:
         return redirect_admin("未找到该邮箱用户。", kind="error")
@@ -1059,7 +1150,7 @@ def admin_test_model(
 
 @app.get('/admin/users/export')
 def export_users(request: Request, session: Session = Depends(get_session)) -> Response:
-    require_admin(request, session)
+    require_super_admin(request, session)
     query = request.query_params.get("q", "").strip()
     user_query = session.query(User)
     if query:
@@ -1113,7 +1204,7 @@ def export_model_logs(request: Request, session: Session = Depends(get_session))
 
 @app.get('/admin/audits/export')
 def export_admin_audits(request: Request, session: Session = Depends(get_session)) -> Response:
-    require_admin(request, session)
+    require_super_admin(request, session)
     audits = session.query(AdminAudit).order_by(AdminAudit.created_at.desc()).limit(1000).all()
     output = StringIO()
     writer = csv.writer(output)
@@ -1175,7 +1266,7 @@ def register(
             template_context(request, error="该邮箱已注册。"),
             status_code=400,
         )
-    user = User(email=email, name=name, password_hash=hash_password(password))
+    user = User(email=email, name=name, password_hash=hash_password(password), email_verified=False)
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -1184,6 +1275,18 @@ def register(
         billing_service.credit_wallet(session, wallet, settings.signup_bonus_cents, "注册赠送")
     request.session.clear()
     request.session['user_id'] = user.id
+    if _smtp_ready():
+        token = _create_email_token(session, user, "verify", expires_in_minutes=60)
+        verify_url = f"{settings.app_base_url}/verify/{token.token}"
+        try:
+            _send_email(
+                user.email,
+                "请验证您的邮箱",
+                f"请点击以下链接完成邮箱验证：{verify_url}",
+            )
+            return RedirectResponse('/?notice=已发送验证邮件', status_code=303)
+        except Exception:
+            pass
     return RedirectResponse('/', status_code=303)
 
 
@@ -1210,6 +1313,8 @@ def login(
         )
     request.session.clear()
     request.session['user_id'] = user.id
+    if not user.email_verified:
+        return RedirectResponse('/?notice=邮箱未验证，可在个人中心重新发送', status_code=303)
     return RedirectResponse('/', status_code=303)
 
 
@@ -1218,6 +1323,140 @@ def logout(request: Request, csrf_token: str = Form(...)) -> RedirectResponse:
     verify_csrf(request, csrf_token)
     request.session.clear()
     return RedirectResponse('/', status_code=303)
+
+
+@app.get('/verify/{token}', response_class=HTMLResponse)
+def verify_email(token: str, request: Request, session: Session = Depends(get_session)) -> HTMLResponse:
+    email_token = session.query(EmailToken).filter(EmailToken.token == token, EmailToken.purpose == "verify").one_or_none()
+    if not email_token or email_token.used_at or email_token.expires_at < datetime.utcnow():
+        return templates.TemplateResponse(
+            "verify_result.html",
+            template_context(request, title="验证失败", message="验证链接无效或已过期。"),
+            status_code=400,
+        )
+    user = session.query(User).filter(User.id == email_token.user_id).one()
+    user.email_verified = True
+    email_token.used_at = datetime.utcnow()
+    session.add(user)
+    session.add(email_token)
+    session.commit()
+    return templates.TemplateResponse(
+        "verify_result.html",
+        template_context(request, title="验证成功", message="邮箱已验证，可正常使用全部功能。"),
+    )
+
+
+@app.post('/verify/resend')
+def resend_verification(request: Request, csrf_token: str = Form(...), session: Session = Depends(get_session)) -> RedirectResponse:
+    verify_csrf(request, csrf_token)
+    user = require_user(request, session)
+    if user.email_verified:
+        return redirect_notice("邮箱已验证")
+    if not _smtp_ready():
+        return redirect_notice("邮件服务未配置，请联系管理员")
+    token = _create_email_token(session, user, "verify", expires_in_minutes=60)
+    verify_url = f"{settings.app_base_url}/verify/{token.token}"
+    try:
+        _send_email(
+            user.email,
+            "请验证您的邮箱",
+            f"请点击以下链接完成邮箱验证：{verify_url}",
+        )
+    except Exception:
+        return redirect_notice("发送失败，请稍后再试")
+    return redirect_notice("验证邮件已发送")
+
+
+@app.get('/password/forgot', response_class=HTMLResponse)
+def forgot_password_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("password_forgot.html", template_context(request, error=None))
+
+
+@app.post('/password/forgot', response_class=HTMLResponse)
+def forgot_password(
+    request: Request,
+    email: str = Form(...),
+    csrf_token: str = Form(...),
+    session: Session = Depends(get_session),
+) -> HTMLResponse:
+    verify_csrf(request, csrf_token)
+    user = session.query(User).filter(User.email == email.strip()).one_or_none()
+    if not user:
+        return templates.TemplateResponse(
+            "password_forgot.html",
+            template_context(request, error="邮箱不存在。"),
+            status_code=400,
+        )
+    if not _smtp_ready():
+        return templates.TemplateResponse(
+            "password_forgot.html",
+            template_context(request, error="邮件服务未配置，请联系管理员。"),
+            status_code=400,
+        )
+    token = _create_email_token(session, user, "reset", expires_in_minutes=30)
+    reset_url = f"{settings.app_base_url}/password/reset/{token.token}"
+    try:
+        _send_email(
+            user.email,
+            "密码重置",
+            f"请点击以下链接重置密码（30 分钟内有效）：{reset_url}",
+        )
+    except Exception:
+        return templates.TemplateResponse(
+            "password_forgot.html",
+            template_context(request, error="发送失败，请稍后再试。"),
+            status_code=400,
+        )
+    return templates.TemplateResponse(
+        "password_forgot.html",
+        template_context(request, error=None, notice="重置邮件已发送，请检查邮箱。"),
+    )
+
+
+@app.get('/password/reset/{token}', response_class=HTMLResponse)
+def reset_password_page(token: str, request: Request, session: Session = Depends(get_session)) -> HTMLResponse:
+    email_token = session.query(EmailToken).filter(EmailToken.token == token, EmailToken.purpose == "reset").one_or_none()
+    if not email_token or email_token.used_at or email_token.expires_at < datetime.utcnow():
+        return templates.TemplateResponse(
+            "verify_result.html",
+            template_context(request, title="链接无效", message="重置链接无效或已过期。"),
+            status_code=400,
+        )
+    return templates.TemplateResponse("password_reset.html", template_context(request, token=token, error=None))
+
+
+@app.post('/password/reset')
+def reset_password(
+    request: Request,
+    token: str = Form(...),
+    password: str = Form(...),
+    csrf_token: str = Form(...),
+    session: Session = Depends(get_session),
+) -> Response:
+    verify_csrf(request, csrf_token)
+    email_token = session.query(EmailToken).filter(EmailToken.token == token, EmailToken.purpose == "reset").one_or_none()
+    if not email_token or email_token.used_at or email_token.expires_at < datetime.utcnow():
+        return templates.TemplateResponse(
+            "password_reset.html",
+            template_context(request, token=token, error="链接无效或已过期。"),
+            status_code=400,
+        )
+    if len(password.strip()) < 6:
+        return templates.TemplateResponse(
+            "password_reset.html",
+            template_context(request, token=token, error="密码至少 6 位。"),
+            status_code=400,
+        )
+    user = session.query(User).filter(User.id == email_token.user_id).one()
+    user.password_hash = hash_password(password.strip())
+    email_token.used_at = datetime.utcnow()
+    session.add(user)
+    session.add(email_token)
+    session.commit()
+    return templates.TemplateResponse(
+        "verify_result.html",
+        template_context(request, title="密码已重置", message="请使用新密码登录。"),
+    )
 
 
 def _load_source(title: str, text: str, upload: UploadFile | None) -> tuple[str, str, str]:
@@ -1250,13 +1489,19 @@ def run_review(
     if wallet.balance_cents < quote.total_price_cents:
         return redirect_error("余额不足，请先充值")
 
+    try:
+        report = _run_with_timeout(
+            lambda: review_service.generate(title, source_text, model_alias),
+            settings.task_timeout_seconds,
+        )
+    except FutureTimeout:
+        return redirect_error("处理超时，请稍后重试或缩短内容")
+
     billing_service.spend(session, wallet, quote.total_price_cents, f"AI审稿 {title}")
     document = DocumentRecord(user_id=user.id, title=title, source_name=source_name, text_content=source_text, char_count=quote.char_count)
     session.add(document)
     session.commit()
     session.refresh(document)
-
-    report = review_service.generate(title, source_text, model_alias)
     profile = model_router.resolve(model_alias)
     fallback_notice = None
     if report.provider_name == "heuristic":
@@ -1316,13 +1561,19 @@ def run_rewrite(
     if wallet.balance_cents < quote.total_price_cents:
         return redirect_error("余额不足，请先充值")
 
+    try:
+        result = _run_with_timeout(
+            lambda: rewrite_service.optimize(title, source_text, mode, model_alias),
+            settings.task_timeout_seconds,
+        )
+    except FutureTimeout:
+        return redirect_error("处理超时，请稍后重试或缩短内容")
+
     billing_service.spend(session, wallet, quote.total_price_cents, f"原创性优化 {title}")
     document = DocumentRecord(user_id=user.id, title=title, source_name=source_name, text_content=source_text, char_count=quote.char_count)
     session.add(document)
     session.commit()
     session.refresh(document)
-
-    result = rewrite_service.optimize(title, source_text, mode, model_alias)
     profile = model_router.resolve(model_alias)
     fallback_notice = None
     if result.provider_name == "heuristic":

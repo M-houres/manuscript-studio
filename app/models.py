@@ -20,6 +20,7 @@ class User(TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
     wallet: Mapped["WalletAccount"] = relationship(back_populates="user", uselist=False)
     documents: Mapped[list["DocumentRecord"]] = relationship(back_populates="user")
@@ -75,6 +76,18 @@ class ModelConfig(TimestampMixin, Base):
     max_tokens: Mapped[int] = mapped_column(Integer, default=2000)
     enabled: Mapped[int] = mapped_column(Integer, default=1)
     description: Mapped[str] = mapped_column(String(255), default="")
+
+
+class EmailToken(TimestampMixin, Base):
+    __tablename__ = "email_tokens"
+    __table_args__ = (UniqueConstraint("token", name="uq_email_token_token"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    token: Mapped[str] = mapped_column(String(64), index=True)
+    purpose: Mapped[str] = mapped_column(String(32))
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class WalletAccount(TimestampMixin, Base):

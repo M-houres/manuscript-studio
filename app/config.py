@@ -22,6 +22,14 @@ def _env_list(name: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _env_optional(name: str, default: str | None = None) -> str | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip()
+    return value or default
+
+
 @dataclass(slots=True)
 class Settings:
     app_name: str = os.getenv("APP_NAME", "Manuscript Studio")
@@ -42,6 +50,7 @@ class Settings:
     llm_timeout_seconds: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
 
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    log_file: str | None = _env_optional("LOG_FILE", str(DATA_DIR / "logs" / "app.log"))
 
     session_cookie_name: str = os.getenv("SESSION_COOKIE_NAME", "ms_session")
     session_cookie_samesite: str = os.getenv("SESSION_COOKIE_SAMESITE", "lax")
@@ -51,6 +60,18 @@ class Settings:
     hsts_enabled: bool = _env_bool("HSTS_ENABLED", os.getenv("APP_ENV", "development") == "production")
     allowed_hosts: list[str] = _env_list("APP_ALLOWED_HOSTS") or ["*"]
     admin_emails: list[str] = _env_list("ADMIN_EMAILS")
+    super_admin_emails: list[str] = _env_list("SUPER_ADMIN_EMAILS")
+
+    app_base_url: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
+
+    smtp_host: str = os.getenv("SMTP_HOST", "")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user: str = os.getenv("SMTP_USER", "")
+    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
+    smtp_sender: str = os.getenv("SMTP_SENDER", "")
+    smtp_use_tls: bool = _env_bool("SMTP_USE_TLS", True)
+
+    task_timeout_seconds: int = int(os.getenv("TASK_TIMEOUT_SECONDS", "75"))
 
     enable_payments: bool = _env_bool("ENABLE_PAYMENTS", False)
     enable_mock_topup: bool = _env_bool("ENABLE_MOCK_TOPUP", False)

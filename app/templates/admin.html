@@ -45,6 +45,16 @@
                     <strong>{{ "%.2f"|format(revenue_24h) }} 元</strong>
                 </div>
             </div>
+            <div class="kpi" style="margin-top:12px;">
+                <div class="kpi-item">
+                    <span class="muted">24h 平均延迟</span>
+                    <strong>{{ avg_latency_24h }} ms</strong>
+                </div>
+                <div class="kpi-item">
+                    <span class="muted">总体平均延迟</span>
+                    <strong>{{ avg_latency_all }} ms</strong>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -78,7 +88,7 @@
                             <input type="hidden" name="alias" value="{{ item.alias }}">
                             <button class="ghost" type="submit">测试</button>
                         </form>
-                        {% if item.source == "db" %}
+                        {% if item.source == "db" and is_super_admin %}
                         <form method="post" action="/admin/models/toggle" style="display:inline-flex;margin-left:8px;" data-confirm="确认切换该模型状态？">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <input type="hidden" name="alias" value="{{ item.alias }}">
@@ -91,6 +101,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if is_super_admin %}
         <form method="post" action="/admin/models/reset" class="form-grid full" style="margin-top:16px;" data-confirm="确认重置该模型配置？">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label>重置配置（回退环境变量）
@@ -100,10 +111,12 @@
                 <button class="ghost" type="submit">重置</button>
             </div>
         </form>
+        {% endif %}
     </article>
 
     <article class="card">
         <h2>新增/更新模型</h2>
+        {% if is_super_admin %}
         <form method="post" action="/admin/models/save" class="form-grid full">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label>别名
@@ -147,12 +160,16 @@
                 {% endfor %}
             </ul>
         </div>
+        {% else %}
+        <p class="muted">仅超级管理员可修改模型配置。</p>
+        {% endif %}
     </article>
 </section>
 
 <section class="grid two">
     <article class="card">
         <h2>用户余额调整</h2>
+        {% if is_super_admin %}
         <form method="post" action="/admin/wallets/adjust" class="form-grid full" data-confirm="确认调整该用户余额？">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label>用户邮箱
@@ -169,6 +186,9 @@
             </div>
         </form>
         <p class="muted">建议先通过“注册赠送额度”或手动调整方式完成内测赠送。</p>
+        {% else %}
+        <p class="muted">仅超级管理员可调整余额。</p>
+        {% endif %}
     </article>
 
     <article class="card">
@@ -180,7 +200,9 @@
             <div class="button-row">
                 <button class="ghost" type="submit">搜索</button>
                 <a class="ghost-link" href="/admin">清空</a>
+                {% if is_super_admin %}
                 <a class="ghost-link" href="/admin/users/export?q={{ user_query }}">导出 CSV</a>
+                {% endif %}
             </div>
         </form>
         <table class="table">
@@ -203,6 +225,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% if is_super_admin %}
         <form method="post" action="/admin/users/reset_password" class="form-grid full" style="margin-top:16px;" data-confirm="确认重置该用户密码？">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label>重置密码（管理员）
@@ -215,6 +238,9 @@
                 <button class="ghost" type="submit">重置密码</button>
             </div>
         </form>
+        {% else %}
+        <p class="muted">仅超级管理员可重置密码。</p>
+        {% endif %}
     </article>
 </section>
 
