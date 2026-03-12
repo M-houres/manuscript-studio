@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -636,7 +637,12 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
                     "description": matched.description,
                 }
 
-    users = session.query(User).order_by(User.created_at.desc()).limit(50).all()
+    query = request.query_params.get("q", "").strip()
+    user_query = session.query(User)
+    if query:
+        like = f"%{query}%"
+        user_query = user_query.filter(or_(User.email.like(like), User.name.like(like)))
+    users = user_query.order_by(User.created_at.desc()).limit(50).all()
     user_rows = []
     for item in users:
         wallet = billing_service.ensure_wallet(session, item.id)
@@ -673,6 +679,7 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
             model_rows=model_rows,
             edit_model=edit_model,
             users=user_rows,
+            user_query=query,
             presets=presets,
             logs=logs,
             audits=audits,
@@ -864,29 +871,85 @@ def admin_test_model(
         return redirect_admin("未找到该模型配置。", kind="error")
     if not profile.enabled:
         return redirect_admin("模型未启用或未配置 Key。", kind="error")
+    start = time.perf_counter()
     try:
         model_router.complete_text(
             alias,
             system_prompt="You are a health checker.",
             user_prompt="Reply with OK.",
         )
-    except Exception:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+    except Exception as exc:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        short_err = str(exc).strip()
+        if len(short_err) > 160:
+            short_err = short_err[:160] + "..."
         log_admin_action(
             session,
             actor_email=user.email,
             action="model_test_fail",
             target=alias,
+            note=short_err,
         )
         session.commit()
-        return redirect_admin("模型联通失败，请检查 Key/Base URL。", kind="error")
+        detail = f"模型联通失败：{short_err}" if short_err else "模型联通失败，请检查 Key/Base URL。"
+        return redirect_admin(detail, kind="error")
     log_admin_action(
         session,
         actor_email=user.email,
         action="model_test_ok",
         target=alias,
+        note=f"{latency_ms}ms",
     )
     session.commit()
-    return redirect_admin("模型联通成功。")
+    return redirect_admin(f"模型联通成功，耗时 {latency_ms}ms。")
+
+
+@app.get('/admin/logs/export')
+def export_model_logs(request: Request, session: Session = Depends(get_session)) -> Response:
+    require_admin(request, session)
+    logs = session.query(ModelCallLog).order_by(ModelCallLog.created_at.desc()).limit(1000).all()
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["created_at", "alias", "provider", "model", "success", "latency_ms", "error_message"])
+    for item in logs:
+        writer.writerow([
+            item.created_at.strftime("%Y-%m-%d %H:%M"),
+            item.alias,
+            item.provider_name,
+            item.model,
+            "yes" if item.success else "no",
+            item.latency_ms,
+            item.error_message or "",
+        ])
+    return Response(
+        output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=model_logs.csv"},
+    )
+
+
+@app.get('/admin/audits/export')
+def export_admin_audits(request: Request, session: Session = Depends(get_session)) -> Response:
+    require_admin(request, session)
+    audits = session.query(AdminAudit).order_by(AdminAudit.created_at.desc()).limit(1000).all()
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["created_at", "actor_email", "action", "target", "amount_yuan", "note"])
+    for item in audits:
+        writer.writerow([
+            item.created_at.strftime("%Y-%m-%d %H:%M"),
+            item.actor_email,
+            item.action,
+            item.target,
+            f"{item.amount_cents / 100:.2f}",
+            item.note,
+        ])
+    return Response(
+        output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=admin_audits.csv"},
+    )
 
 
 @app.post('/bonus/claim')

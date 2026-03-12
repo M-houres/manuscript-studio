@@ -145,6 +145,15 @@
 
     <article class="card">
         <h2>最新用户</h2>
+        <form method="get" action="/admin" class="form-grid full" style="margin-bottom:16px;">
+            <label>搜索用户（邮箱/姓名）
+                <input type="text" name="q" value="{{ user_query }}" placeholder="输入关键词">
+            </label>
+            <div class="button-row">
+                <button class="ghost" type="submit">搜索</button>
+                <a class="ghost-link" href="/admin">清空</a>
+            </div>
+        </form>
         <table class="table">
             <thead>
                 <tr>
@@ -182,6 +191,9 @@
 
 <section class="card">
     <h2>最近模型调用</h2>
+    <div class="button-row" style="margin-bottom:12px;">
+        <a class="ghost-link" href="/admin/logs/export">导出 CSV</a>
+    </div>
     <table class="table">
         <thead>
             <tr>
@@ -210,6 +222,9 @@
 
 <section class="card">
     <h2>管理员操作审计</h2>
+    <div class="button-row" style="margin-bottom:12px;">
+        <a class="ghost-link" href="/admin/audits/export">导出 CSV</a>
+    </div>
     <table class="table">
         <thead>
             <tr>
