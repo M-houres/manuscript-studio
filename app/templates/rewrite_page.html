@@ -22,7 +22,7 @@
 
 <section class="card">
     {% if user %}
-    <form method="post" action="/review" enctype="multipart/form-data" class="form-grid full">
+    <form method="post" action="/review" enctype="multipart/form-data" class="form-grid full" onsubmit="return handleSubmit(this);">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label>标题
             <input type="text" name="title" placeholder="例如：人工智能赋能高校教学评价">
@@ -52,6 +52,7 @@
             <button class="primary" type="submit">开始优化</button>
             <a class="ghost-link" href="/history">查看历史记录</a>
         </div>
+        <p class="muted" id="submitHint">提交后将进入处理，请勿重复点击。</p>
     </form>
     {% else %}
     <p class="muted">请先登录后使用优化功能。</p>

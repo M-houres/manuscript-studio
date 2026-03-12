@@ -96,6 +96,6 @@
         <small>内测权益</small>
     </button>
 
-    <script>const toggle=document.getElementById("navToggle");const overlay=document.getElementById("navOverlay");if(toggle&&overlay){const closeNav=()=>document.body.classList.remove("nav-open");toggle.addEventListener("click",()=>document.body.classList.toggle("nav-open"));overlay.addEventListener("click",closeNav);}</script>
+    <script>const toggle=document.getElementById("navToggle");const overlay=document.getElementById("navOverlay");if(toggle&&overlay){const closeNav=()=>document.body.classList.remove("nav-open");toggle.addEventListener("click",()=>document.body.classList.toggle("nav-open"));overlay.addEventListener("click",closeNav);}function handleSubmit(form){const btn=form.querySelector("button.primary");const hint=form.querySelector("#submitHint");if(btn){btn.disabled=true;btn.textContent="处理中...";}if(hint){hint.textContent="已提交，正在处理，请稍候。";}return true;}function copyText(id){const el=document.getElementById(id);if(!el){return;}el.select();el.setSelectionRange(0,el.value.length);document.execCommand("copy");}</script>
 </body>
 </html>

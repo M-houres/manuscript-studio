@@ -31,6 +31,9 @@
         <button class="ghost" type="submit">领取内测额度 {{ "%.2f"|format(internal_bonus_yuan) }} 元</button>
     </form>
     {% endif %}
+    <div class="button-row">
+        <a class="ghost-link" href="/contact">联系客服/申请额度</a>
+    </div>
     {% else %}
     <div class="card flat">
         <p class="muted">登录后可使用完整功能与历史记录。</p>

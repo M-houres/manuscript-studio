@@ -14,6 +14,10 @@
     </div>
     {% if fallback_notice %}<p class="notice error">{{ fallback_notice }}</p>{% endif %}
     <p class="muted">消耗 {{ "%.2f"|format(run.total_price_cents / 100) }} 元，{{ run.billed_chars }} 字符，模型：{{ report.model_alias }} / {{ report.provider_name }}</p>
+    <div class="button-row">
+        <button class="ghost" type="button" onclick="copyText('reviewResultText')">复制结果</button>
+        <a class="ghost-link" href="data:text/plain;charset=utf-8,{{ report.summary | urlencode }}" download="review_summary.txt">下载摘要</a>
+    </div>
 </section>
 
 <section class="grid two">
@@ -69,4 +73,26 @@
         {% endfor %}
     </div>
 </section>
+<textarea id="reviewResultText" style="position:absolute;left:-9999px;top:-9999px;">{{ report.summary }}
+
+分项评分：
+{% for item in report.dimension_scores %}{{ item.name }}：{{ item.score }} 分 · {{ item.rationale }}
+{% endfor %}
+
+修改优先级：
+{% for item in report.priorities %}- {{ item }}
+{% endfor %}
+
+亮点：
+{% for item in report.strengths %}- {{ item }}
+{% endfor %}
+
+建议结构：
+{% for item in report.revised_outline %}{{ item }}
+{% endfor %}
+
+问题清单：
+{% for issue in report.issues %}- {{ issue.category }} / {{ issue.severity }} / 第{{ issue.paragraph_index }}段：{{ issue.finding }}
+{% endfor %}
+</textarea>
 {% endblock %}

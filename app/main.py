@@ -459,12 +459,15 @@ def ppt_page(request: Request, session: Session = Depends(get_session)) -> HTMLR
 def assets_page(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:
     user = require_user(request, session)
     page = max(1, int(request.query_params.get("page", "1")))
+    query = request.query_params.get("q", "").strip()
     page_size = 12
-    total = session.query(DocumentRecord).filter(DocumentRecord.user_id == user.id).count()
+    base_query = session.query(DocumentRecord).filter(DocumentRecord.user_id == user.id)
+    if query:
+        base_query = base_query.filter(DocumentRecord.title.like(f"%{query}%"))
+    total = base_query.count()
     total_pages = max(1, ceil(total / page_size)) if total else 1
     docs = (
-        session.query(DocumentRecord)
-        .filter(DocumentRecord.user_id == user.id)
+        base_query
         .order_by(DocumentRecord.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
@@ -479,6 +482,7 @@ def assets_page(request: Request, session: Session = Depends(get_session)) -> HT
             documents=docs,
             page=page,
             total_pages=total_pages,
+            query=query,
         ),
     )
 

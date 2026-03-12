@@ -14,6 +14,10 @@
     </div>
     {% if fallback_notice %}<p class="notice error">{{ fallback_notice }}</p>{% endif %}
     <p class="muted">消耗 {{ "%.2f"|format(run.total_price_cents / 100) }} 元，{{ run.billed_chars }} 字符</p>
+    <div class="button-row">
+        <button class="ghost" type="button" onclick="copyText('rewriteResultText')">复制结果</button>
+        <a class="ghost-link" href="data:text/plain;charset=utf-8,{{ result.optimized_text | urlencode }}" download="rewrite.txt">下载全文</a>
+    </div>
 </section>
 
 <section class="grid two">
@@ -55,4 +59,5 @@
         </div>
     </article>
 </section>
+<textarea id="rewriteResultText" style="position:absolute;left:-9999px;top:-9999px;">{{ result.optimized_text }}</textarea>
 {% endblock %}
