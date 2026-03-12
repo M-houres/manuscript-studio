@@ -9,7 +9,7 @@
         {% for section in sections %}
         <h3>{{ section.title }}</h3>
         <ul class="issues">
-            {% for item in section.items %}
+            {% for item in section["items"] %}
             <li>{{ item }}</li>
             {% endfor %}
         </ul>

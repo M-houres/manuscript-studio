@@ -3,6 +3,7 @@
 __pycache__/
 *.pyc
 .venv/
-data/app.db
+data/*.db
+data/logs/
 uploads/*
 !uploads/.gitkeep
