@@ -4,13 +4,24 @@
     <h1>{{ title }}</h1>
     <p class="muted">{{ summary }}</p>
     <div class="card flat">
-        <p class="muted">当前为内测简版条款，正式运营前将更新为完整版本。</p>
+        <p class="muted">当前为内测版本条款，正式运营前可能更新。</p>
+        {% if sections %}
+        {% for section in sections %}
+        <h3>{{ section.title }}</h3>
+        <ul class="issues">
+            {% for item in section.items %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+        {% endfor %}
+        {% else %}
         <ul class="issues">
             <li>我们仅在提供服务所需范围内收集账号信息与上传文稿内容。</li>
             <li>文稿内容仅用于生成审稿/优化结果，不会用于公开展示。</li>
             <li>用户可联系管理员申请删除账号与历史记录。</li>
             <li>如需正式版本，请联系管理员获取最新文本。</li>
         </ul>
+        {% endif %}
     </div>
 </section>
 {% endblock %}

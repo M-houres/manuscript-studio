@@ -25,6 +25,26 @@
                     <strong>{{ fail_24h }}</strong>
                 </div>
             </div>
+            <div class="kpi" style="margin-top:12px;">
+                <div class="kpi-item">
+                    <span class="muted">总用户</span>
+                    <strong>{{ total_users }}</strong>
+                </div>
+                <div class="kpi-item">
+                    <span class="muted">总任务</span>
+                    <strong>{{ total_runs }}</strong>
+                </div>
+                <div class="kpi-item">
+                    <span class="muted">累计收入</span>
+                    <strong>{{ "%.2f"|format(total_revenue) }} 元</strong>
+                </div>
+            </div>
+            <div class="kpi" style="margin-top:12px;">
+                <div class="kpi-item">
+                    <span class="muted">24h 收入</span>
+                    <strong>{{ "%.2f"|format(revenue_24h) }} 元</strong>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -59,7 +79,7 @@
                             <button class="ghost" type="submit">测试</button>
                         </form>
                         {% if item.source == "db" %}
-                        <form method="post" action="/admin/models/toggle" style="display:inline-flex;margin-left:8px;">
+                        <form method="post" action="/admin/models/toggle" style="display:inline-flex;margin-left:8px;" data-confirm="确认切换该模型状态？">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <input type="hidden" name="alias" value="{{ item.alias }}">
                             <input type="hidden" name="enabled" value="{{ 0 if item.config_enabled else 1 }}">
@@ -71,7 +91,7 @@
                 {% endfor %}
             </tbody>
         </table>
-        <form method="post" action="/admin/models/reset" class="form-grid full" style="margin-top:16px;">
+        <form method="post" action="/admin/models/reset" class="form-grid full" style="margin-top:16px;" data-confirm="确认重置该模型配置？">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label>重置配置（回退环境变量）
                 <input type="text" name="alias" placeholder="输入别名，例如 review_deep">
@@ -133,7 +153,7 @@
 <section class="grid two">
     <article class="card">
         <h2>用户余额调整</h2>
-        <form method="post" action="/admin/wallets/adjust" class="form-grid full">
+        <form method="post" action="/admin/wallets/adjust" class="form-grid full" data-confirm="确认调整该用户余额？">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label>用户邮箱
                 <input type="email" name="email" placeholder="user@example.com" required>
@@ -160,6 +180,7 @@
             <div class="button-row">
                 <button class="ghost" type="submit">搜索</button>
                 <a class="ghost-link" href="/admin">清空</a>
+                <a class="ghost-link" href="/admin/users/export?q={{ user_query }}">导出 CSV</a>
             </div>
         </form>
         <table class="table">
@@ -182,7 +203,7 @@
                 {% endfor %}
             </tbody>
         </table>
-        <form method="post" action="/admin/users/reset_password" class="form-grid full" style="margin-top:16px;">
+        <form method="post" action="/admin/users/reset_password" class="form-grid full" style="margin-top:16px;" data-confirm="确认重置该用户密码？">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label>重置密码（管理员）
                 <input type="email" name="email" placeholder="user@example.com" required>

@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -26,7 +26,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .config import BASE_DIR, settings
 from .database import get_session, init_db
-from .models import AdminAudit, AnalysisRun, BonusClaim, DocumentRecord, ModelCallLog, ModelConfig, User
+from .models import AdminAudit, AnalysisRun, BonusClaim, DocumentRecord, ModelCallLog, ModelConfig, User, WalletAccount
 from .security import hash_password, verify_password
 from .services.billing import billing_service
 from .services.documents import document_service
@@ -607,6 +607,45 @@ def privacy_page(request: Request, session: Session = Depends(get_session)) -> H
             **page_context(request, session),
             title="隐私政策",
             summary="说明数据收集范围、用途与保护措施。",
+            sections=[
+                {
+                    "title": "信息收集范围",
+                    "items": [
+                        "账号信息：邮箱、姓名等注册信息。",
+                        "使用数据：访问时间、设备信息、必要日志。",
+                        "文稿内容：用户主动上传或输入的文本与文件。",
+                    ],
+                },
+                {
+                    "title": "使用目的",
+                    "items": [
+                        "提供审稿与优化服务并生成结果。",
+                        "计费与账户管理。",
+                        "改进服务质量与安全。",
+                    ],
+                },
+                {
+                    "title": "保存与保护",
+                    "items": [
+                        "数据仅在提供服务所需范围内保存。",
+                        "采用访问控制、最小权限与日志审计。",
+                        "用户可申请删除账号与历史记录。",
+                    ],
+                },
+                {
+                    "title": "共享与披露",
+                    "items": [
+                        "未经同意不会对外披露内容。",
+                        "法律法规或监管要求除外。",
+                    ],
+                },
+                {
+                    "title": "联系我们",
+                    "items": [
+                        "如需删除数据或咨询，请联系管理员。",
+                    ],
+                },
+            ],
         ),
     )
 
@@ -620,6 +659,42 @@ def terms_page(request: Request, session: Session = Depends(get_session)) -> HTM
             **page_context(request, session),
             title="用户协议",
             summary="明确服务范围、责任边界与使用规范。",
+            sections=[
+                {
+                    "title": "服务范围",
+                    "items": [
+                        "提供文稿审稿与原创性优化等服务。",
+                        "部分功能处于内测阶段，可能调整或下线。",
+                    ],
+                },
+                {
+                    "title": "用户义务",
+                    "items": [
+                        "不得上传违法违规或侵权内容。",
+                        "需保证提交内容的合法使用权。",
+                    ],
+                },
+                {
+                    "title": "结果说明",
+                    "items": [
+                        "AI 结果仅供参考，用户需自行判断与修改。",
+                        "平台不对最终发表或学术结果负责。",
+                    ],
+                },
+                {
+                    "title": "计费与退款",
+                    "items": [
+                        "计费规则以页面展示为准。",
+                        "内测阶段可能提供免费额度或活动。",
+                    ],
+                },
+                {
+                    "title": "协议变更",
+                    "items": [
+                        "如有调整将以站内公告或页面更新为准。",
+                    ],
+                },
+            ],
         ),
     )
 
@@ -706,6 +781,15 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
     since = datetime.utcnow() - timedelta(hours=24)
     success_24h = session.query(ModelCallLog).filter(ModelCallLog.created_at >= since, ModelCallLog.success == True).count()
     fail_24h = session.query(ModelCallLog).filter(ModelCallLog.created_at >= since, ModelCallLog.success == False).count()
+    total_users = session.query(func.count(User.id)).scalar() or 0
+    total_runs = session.query(func.count(AnalysisRun.id)).scalar() or 0
+    total_revenue_cents = session.query(func.coalesce(func.sum(AnalysisRun.total_price_cents), 0)).scalar() or 0
+    revenue_24h_cents = (
+        session.query(func.coalesce(func.sum(AnalysisRun.total_price_cents), 0))
+        .filter(AnalysisRun.created_at >= since)
+        .scalar()
+        or 0
+    )
 
     return templates.TemplateResponse(
         "admin.html",
@@ -723,6 +807,10 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
             audits=audits,
             success_24h=success_24h,
             fail_24h=fail_24h,
+            total_users=total_users,
+            total_runs=total_runs,
+            total_revenue=total_revenue_cents / 100,
+            revenue_24h=revenue_24h_cents / 100,
             error=request.query_params.get("error"),
             notice=request.query_params.get("notice"),
         ),
@@ -967,6 +1055,36 @@ def admin_test_model(
     )
     session.commit()
     return redirect_admin(f"模型联通成功，耗时 {latency_ms}ms。")
+
+
+@app.get('/admin/users/export')
+def export_users(request: Request, session: Session = Depends(get_session)) -> Response:
+    require_admin(request, session)
+    query = request.query_params.get("q", "").strip()
+    user_query = session.query(User)
+    if query:
+        like = f"%{query}%"
+        user_query = user_query.filter(or_(User.email.like(like), User.name.like(like)))
+    users = user_query.order_by(User.created_at.desc()).limit(2000).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "email", "name", "balance_yuan", "created_at"])
+    for user in users:
+        wallet = session.query(WalletAccount).filter(WalletAccount.user_id == user.id).one_or_none()
+        balance = wallet.balance_cents if wallet else 0
+        writer.writerow([
+            user.id,
+            user.email,
+            user.name,
+            f"{balance / 100:.2f}",
+            user.created_at.strftime("%Y-%m-%d %H:%M"),
+        ])
+    return Response(
+        output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=users.csv"},
+    )
 
 
 @app.get('/admin/logs/export')
