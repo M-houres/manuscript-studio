@@ -44,7 +44,13 @@
         </tbody>
     </table>
     {% else %}
-    <p class="muted">暂无文档，请先进行一次审稿或优化。</p>
+    <div class="card flat">
+        <p class="muted">暂无文档，请先进行一次审稿或优化。</p>
+        <div class="button-row">
+            <a class="ghost-link" href="/audit">开始审稿</a>
+            <a class="ghost-link" href="/review">开始优化</a>
+        </div>
+    </div>
     {% endif %}
 </section>
 

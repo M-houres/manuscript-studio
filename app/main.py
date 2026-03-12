@@ -233,6 +233,39 @@ def require_admin(request: Request, session: Session) -> User:
     return user
 
 
+@app.exception_handler(HTTPException)
+def http_exception_handler(request: Request, exc: HTTPException) -> HTMLResponse:
+    if exc.status_code in {403, 404}:
+        title = "无权限访问" if exc.status_code == 403 else "页面未找到"
+        return templates.TemplateResponse(
+            "error.html",
+            template_context(
+                request,
+                **page_context(request),
+                title=title,
+                status_code=exc.status_code,
+                message=exc.detail if isinstance(exc.detail, str) else "请联系管理员。",
+            ),
+            status_code=exc.status_code,
+        )
+    return HTMLResponse(content=str(exc.detail), status_code=exc.status_code)
+
+
+@app.exception_handler(Exception)
+def unhandled_exception_handler(request: Request, exc: Exception) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "error.html",
+        template_context(
+            request,
+            **page_context(request),
+            title="服务异常",
+            status_code=500,
+            message="服务暂时不可用，请稍后重试。",
+        ),
+        status_code=500,
+    )
+
+
 def log_admin_action(
     session: Session,
     *,
@@ -609,6 +642,7 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
                 "enabled": profile.enabled,
                 "api_key_set": bool(profile.api_key),
                 "source": "db" if config else "env",
+                "config_enabled": bool(config.enabled) if config else None,
             }
         )
 
@@ -762,6 +796,32 @@ def admin_save_model(
     )
     session.commit()
     return redirect_admin("模型配置已保存。")
+
+
+@app.post('/admin/models/toggle')
+def admin_toggle_model(
+    request: Request,
+    alias: str = Form(...),
+    enabled: int = Form(...),
+    csrf_token: str = Form(...),
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    verify_csrf(request, csrf_token)
+    user = require_admin(request, session)
+    config = session.query(ModelConfig).filter(ModelConfig.alias == alias).one_or_none()
+    if config is None:
+        return redirect_admin("仅支持切换已保存的自定义配置。", kind="error")
+    config.enabled = 1 if enabled else 0
+    session.add(config)
+    log_admin_action(
+        session,
+        actor_email=user.email,
+        action="model_toggle",
+        target=alias,
+        note="enabled" if enabled else "disabled",
+    )
+    session.commit()
+    return redirect_admin("模型状态已更新。")
 
 
 @app.post('/admin/models/reset')

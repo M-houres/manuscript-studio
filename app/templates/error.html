@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    <h1>{{ title }}</h1>
+    <p class="muted">错误代码：{{ status_code }}</p>
+    <div class="card flat">
+        <p class="muted">{{ message }}</p>
+        <div class="button-row">
+            <a class="ghost-link" href="/">返回首页</a>
+            <a class="ghost-link" href="/contact">联系支持</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

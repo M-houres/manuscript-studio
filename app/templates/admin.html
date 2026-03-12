@@ -58,6 +58,14 @@
                             <input type="hidden" name="alias" value="{{ item.alias }}">
                             <button class="ghost" type="submit">测试</button>
                         </form>
+                        {% if item.source == "db" %}
+                        <form method="post" action="/admin/models/toggle" style="display:inline-flex;margin-left:8px;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="alias" value="{{ item.alias }}">
+                            <input type="hidden" name="enabled" value="{{ 0 if item.config_enabled else 1 }}">
+                            <button class="ghost" type="submit">{{ "停用" if item.config_enabled else "启用" }}</button>
+                        </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -91,7 +99,7 @@
                 <input type="text" name="base_url" value="{{ edit_model.base_url if edit_model else '' }}" placeholder="兼容 OpenAI 的 API 地址">
             </label>
             <label>API Key（留空则保留原值）
-                <input type="password" name="api_key" placeholder="sk-***">
+                <input type="password" name="api_key" placeholder="已隐藏">
             </label>
             <label>温度
                 <input type="number" name="temperature" step="0.05" value="{{ edit_model.temperature if edit_model else 0.2 }}">
