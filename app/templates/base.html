@@ -75,6 +75,12 @@
         </header>
 
         <main class="page">
+            {% if request.query_params.get("error") %}
+            <p class="notice error">{{ request.query_params.get("error") }}</p>
+            {% endif %}
+            {% if request.query_params.get("notice") %}
+            <p class="notice success">{{ request.query_params.get("notice") }}</p>
+            {% endif %}
             {% block content %}{% endblock %}
         </main>
 

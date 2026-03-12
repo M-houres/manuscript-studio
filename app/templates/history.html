@@ -7,12 +7,32 @@
             <p class="muted">查看最近的审稿与优化记录，便于回溯与对比。</p>
         </div>
         <div class="card flat">
-            <p class="muted">支持按模型与类型筛选的功能将随后开放。</p>
+            <p class="muted">已支持按模型与类型筛选。</p>
         </div>
     </div>
 </section>
 
 <section class="card">
+    <form method="get" action="/history" class="form-grid full" style="margin-bottom:16px;">
+        <label>类型筛选
+            <select name="kind">
+                <option value="all" {% if kind_filter == "all" %}selected{% endif %}>全部</option>
+                <option value="review" {% if kind_filter == "review" %}selected{% endif %}>审稿</option>
+                <option value="rewrite" {% if kind_filter == "rewrite" %}selected{% endif %}>优化</option>
+            </select>
+        </label>
+        <label>模型筛选
+            <select name="model">
+                <option value="all" {% if model_filter == "all" %}selected{% endif %}>全部</option>
+                {% for model in models %}
+                <option value="{{ model }}" {% if model_filter == model %}selected{% endif %}>{{ model }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <div class="button-row">
+            <button class="ghost" type="submit">筛选</button>
+        </div>
+    </form>
     {% if runs %}
     <table class="table">
         <thead>
@@ -44,12 +64,14 @@
 </section>
 
 <section class="card flat">
+    {% set kind_q = "" if kind_filter == "all" else "&kind=" ~ kind_filter %}
+    {% set model_q = "" if model_filter == "all" else "&model=" ~ model_filter %}
     <div class="button-row">
         {% if page > 1 %}
-        <a class="ghost-link" href="/history?page={{ page - 1 }}">上一页</a>
+        <a class="ghost-link" href="/history?page={{ page - 1 }}{{ kind_q }}{{ model_q }}">上一页</a>
         {% endif %}
         {% if page < total_pages %}
-        <a class="ghost-link" href="/history?page={{ page + 1 }}">下一页</a>
+        <a class="ghost-link" href="/history?page={{ page + 1 }}{{ kind_q }}{{ model_q }}">下一页</a>
         {% endif %}
     </div>
 </section>

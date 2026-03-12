@@ -4,6 +4,7 @@ import json
 import logging
 import secrets
 import time
+from datetime import datetime, timedelta
 from collections import defaultdict, deque
 from math import ceil
 from typing import Deque
@@ -22,7 +23,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .config import BASE_DIR, settings
 from .database import get_session, init_db
-from .models import AnalysisRun, BonusClaim, DocumentRecord, ModelCallLog, ModelConfig, User
+from .models import AdminAudit, AnalysisRun, BonusClaim, DocumentRecord, ModelCallLog, ModelConfig, User
 from .security import hash_password, verify_password
 from .services.billing import billing_service
 from .services.documents import document_service
@@ -229,6 +230,24 @@ def require_admin(request: Request, session: Session) -> User:
     return user
 
 
+def log_admin_action(
+    session: Session,
+    *,
+    actor_email: str,
+    action: str,
+    target: str = "",
+    amount_cents: int = 0,
+    note: str = "",
+) -> None:
+    session.add(AdminAudit(
+        actor_email=actor_email,
+        action=action,
+        target=target,
+        amount_cents=amount_cents,
+        note=note,
+    ))
+
+
 def money(cents: int) -> str:
     return f"{cents / 100:.2f}"
 
@@ -245,6 +264,7 @@ def page_context(request: Request, session: Session | None = None) -> dict:
         "review_price": money(settings.review_price_per_1k_chars_cents),
         "rewrite_price": money(settings.rewrite_price_per_1k_chars_cents),
         "internal_bonus_yuan": settings.internal_bonus_cents / 100 if settings.internal_bonus_cents else 0,
+        "max_upload_mb": settings.max_upload_mb,
         "is_admin": is_admin_user(user),
     }
 
@@ -464,17 +484,31 @@ def assets_page(request: Request, session: Session = Depends(get_session)) -> HT
 def history_page(request: Request, session: Session = Depends(get_session)) -> HTMLResponse:
     user = require_user(request, session)
     page = max(1, int(request.query_params.get("page", "1")))
+    kind_filter = request.query_params.get("kind", "all")
+    model_filter = request.query_params.get("model", "all")
     page_size = 15
-    total = session.query(AnalysisRun).filter(AnalysisRun.user_id == user.id).count()
+    base_query = session.query(AnalysisRun).filter(AnalysisRun.user_id == user.id)
+    if kind_filter in {"review", "rewrite"}:
+        base_query = base_query.filter(AnalysisRun.kind == kind_filter)
+    if model_filter and model_filter != "all":
+        base_query = base_query.filter(AnalysisRun.model_alias == model_filter)
+    total = base_query.count()
     total_pages = max(1, ceil(total / page_size)) if total else 1
     runs = (
-        session.query(AnalysisRun)
-        .filter(AnalysisRun.user_id == user.id)
+        base_query
         .order_by(AnalysisRun.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
+    models = [
+        row[0]
+        for row in session.query(AnalysisRun.model_alias)
+        .filter(AnalysisRun.user_id == user.id)
+        .distinct()
+        .order_by(AnalysisRun.model_alias.asc())
+        .all()
+    ]
     return templates.TemplateResponse(
         "history.html",
         template_context(
@@ -484,6 +518,9 @@ def history_page(request: Request, session: Session = Depends(get_session)) -> H
             runs=runs,
             page=page,
             total_pages=total_pages,
+            models=models,
+            kind_filter=kind_filter,
+            model_filter=model_filter,
         ),
     )
 
@@ -586,6 +623,9 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
         {"name": "01.AI（Yi）", "base_url": "https://api.lingyiwanwu.com/v1"},
     ]
     logs = session.query(ModelCallLog).order_by(ModelCallLog.created_at.desc()).limit(50).all()
+    since = datetime.utcnow() - timedelta(hours=24)
+    success_24h = session.query(ModelCallLog).filter(ModelCallLog.created_at >= since, ModelCallLog.success == True).count()
+    fail_24h = session.query(ModelCallLog).filter(ModelCallLog.created_at >= since, ModelCallLog.success == False).count()
 
     return templates.TemplateResponse(
         "admin.html",
@@ -599,6 +639,8 @@ def admin_page(request: Request, session: Session = Depends(get_session)) -> HTM
             users=user_rows,
             presets=presets,
             logs=logs,
+            success_24h=success_24h,
+            fail_24h=fail_24h,
             error=request.query_params.get("error"),
             notice=request.query_params.get("notice"),
         ),
@@ -621,7 +663,7 @@ def admin_save_model(
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
     verify_csrf(request, csrf_token)
-    require_admin(request, session)
+    user = require_admin(request, session)
     alias = alias.strip()
     if not alias or not model.strip() or not base_url.strip():
         return redirect_admin("请填写别名、模型与 Base URL。", kind="error")
@@ -651,6 +693,12 @@ def admin_save_model(
         config.enabled = 1 if enabled else 0
         config.description = description.strip()
         session.add(config)
+    log_admin_action(
+        session,
+        actor_email=user.email,
+        action="model_save",
+        target=alias,
+    )
     session.commit()
     return redirect_admin("模型配置已保存。")
 
@@ -663,10 +711,16 @@ def admin_reset_model(
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
     verify_csrf(request, csrf_token)
-    require_admin(request, session)
+    user = require_admin(request, session)
     config = session.query(ModelConfig).filter(ModelConfig.alias == alias).one_or_none()
     if config:
         session.delete(config)
+        log_admin_action(
+            session,
+            actor_email=user.email,
+            action="model_reset",
+            target=alias,
+        )
         session.commit()
         return redirect_admin("已移除自定义配置，将回退环境变量。")
     return redirect_admin("未找到该配置。", kind="error")
@@ -682,7 +736,7 @@ def admin_adjust_wallet(
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
     verify_csrf(request, csrf_token)
-    require_admin(request, session)
+    user = require_admin(request, session)
     target = session.query(User).filter(User.email == email.strip()).one_or_none()
     if not target:
         return redirect_admin("未找到该邮箱用户。", kind="error")
@@ -693,11 +747,29 @@ def admin_adjust_wallet(
     note = reason.strip() or "管理员调整"
     if amount_cents > 0:
         billing_service.credit_wallet(session, wallet, amount_cents, note)
+        log_admin_action(
+            session,
+            actor_email=user.email,
+            action="wallet_add",
+            target=target.email,
+            amount_cents=amount_cents,
+            note=note,
+        )
+        session.commit()
         return redirect_admin("已增加余额。")
     try:
         billing_service.spend(session, wallet, abs(amount_cents), note)
     except ValueError:
         return redirect_admin("余额不足，无法扣减。", kind="error")
+    log_admin_action(
+        session,
+        actor_email=user.email,
+        action="wallet_deduct",
+        target=target.email,
+        amount_cents=amount_cents,
+        note=note,
+    )
+    session.commit()
     return redirect_admin("已扣减余额。")
 
 
@@ -710,7 +782,7 @@ def admin_reset_password(
     session: Session = Depends(get_session),
 ) -> RedirectResponse:
     verify_csrf(request, csrf_token)
-    require_admin(request, session)
+    user = require_admin(request, session)
     target = session.query(User).filter(User.email == email.strip()).one_or_none()
     if not target:
         return redirect_admin("未找到该邮箱用户。", kind="error")
@@ -718,8 +790,53 @@ def admin_reset_password(
         return redirect_admin("新密码至少 6 位。", kind="error")
     target.password_hash = hash_password(new_password.strip())
     session.add(target)
+    log_admin_action(
+        session,
+        actor_email=user.email,
+        action="password_reset",
+        target=target.email,
+    )
     session.commit()
     return redirect_admin("密码已重置。")
+
+
+@app.post('/admin/models/test')
+def admin_test_model(
+    request: Request,
+    alias: str = Form(...),
+    csrf_token: str = Form(...),
+    session: Session = Depends(get_session),
+) -> RedirectResponse:
+    verify_csrf(request, csrf_token)
+    user = require_admin(request, session)
+    profile = model_router.resolve(alias)
+    if not profile:
+        return redirect_admin("未找到该模型配置。", kind="error")
+    if not profile.enabled:
+        return redirect_admin("模型未启用或未配置 Key。", kind="error")
+    try:
+        model_router.complete_text(
+            alias,
+            system_prompt="You are a health checker.",
+            user_prompt="Reply with OK.",
+        )
+    except Exception:
+        log_admin_action(
+            session,
+            actor_email=user.email,
+            action="model_test_fail",
+            target=alias,
+        )
+        session.commit()
+        return redirect_admin("模型联通失败，请检查 Key/Base URL。", kind="error")
+    log_admin_action(
+        session,
+        actor_email=user.email,
+        action="model_test_ok",
+        target=alias,
+    )
+    session.commit()
+    return redirect_admin("模型联通成功。")
 
 
 @app.post('/bonus/claim')
@@ -845,6 +962,13 @@ def run_review(
     session.refresh(document)
 
     report = review_service.generate(title, source_text, model_alias)
+    profile = model_router.resolve(model_alias)
+    fallback_notice = None
+    if report.provider_name == "heuristic":
+        if profile and profile.enabled:
+            fallback_notice = "模型调用失败或超时，已降级为本地审稿。"
+        else:
+            fallback_notice = "模型未配置，已使用本地审稿。"
     run = AnalysisRun(
         run_no=str(uuid4()),
         user_id=user.id,
@@ -868,6 +992,7 @@ def run_review(
             wallet=billing_service.ensure_wallet(session, user.id),
             run=run,
             report=report,
+            fallback_notice=fallback_notice,
         ),
     )
 
@@ -903,6 +1028,13 @@ def run_rewrite(
     session.refresh(document)
 
     result = rewrite_service.optimize(title, source_text, mode, model_alias)
+    profile = model_router.resolve(model_alias)
+    fallback_notice = None
+    if result.provider_name == "heuristic":
+        if profile and profile.enabled:
+            fallback_notice = "模型调用失败或超时，已降级为本地优化。"
+        else:
+            fallback_notice = "模型未配置，已使用本地优化。"
     run = AnalysisRun(
         run_no=str(uuid4()),
         user_id=user.id,
@@ -926,6 +1058,7 @@ def run_rewrite(
             wallet=billing_service.ensure_wallet(session, user.id),
             run=run,
             result=result,
+            fallback_notice=fallback_notice,
         ),
     )
 

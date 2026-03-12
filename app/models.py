@@ -49,6 +49,17 @@ class ModelCallLog(TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
+class AdminAudit(TimestampMixin, Base):
+    __tablename__ = "admin_audits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    actor_email: Mapped[str] = mapped_column(String(255))
+    action: Mapped[str] = mapped_column(String(64))
+    target: Mapped[str] = mapped_column(String(255), default="")
+    amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    note: Mapped[str] = mapped_column(String(255), default="")
+
+
 class ModelConfig(TimestampMixin, Base):
     __tablename__ = "model_configs"
     __table_args__ = (UniqueConstraint("alias", name="uq_model_config_alias"),)

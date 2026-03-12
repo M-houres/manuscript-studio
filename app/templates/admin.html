@@ -15,6 +15,16 @@
             {% if internal_bonus_yuan %}
             <p class="muted">内测领取额度：{{ "%.2f"|format(internal_bonus_yuan) }} 元</p>
             {% endif %}
+            <div class="kpi" style="margin-top:12px;">
+                <div class="kpi-item">
+                    <span class="muted">24h 成功</span>
+                    <strong>{{ success_24h }}</strong>
+                </div>
+                <div class="kpi-item">
+                    <span class="muted">24h 失败</span>
+                    <strong>{{ fail_24h }}</strong>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -30,7 +40,7 @@
                     <th>Base URL</th>
                     <th>来源</th>
                     <th>状态</th>
-                    <th></th>
+                    <th>操作</th>
                 </tr>
             </thead>
             <tbody>
@@ -41,7 +51,14 @@
                     <td class="muted">{{ item.base_url }}</td>
                     <td><span class="pill">{{ item.source }}</span></td>
                     <td>{{ "启用" if item.enabled else "停用" }}{% if not item.api_key_set %} · 未配置 Key{% endif %}</td>
-                    <td><a href="/admin?alias={{ item.alias }}">编辑</a></td>
+                    <td>
+                        <a href="/admin?alias={{ item.alias }}">编辑</a>
+                        <form method="post" action="/admin/models/test" style="display:inline-flex;margin-left:8px;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="alias" value="{{ item.alias }}">
+                            <button class="ghost" type="submit">测试</button>
+                        </form>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

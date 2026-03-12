@@ -12,6 +12,7 @@
             <span>{{ result.model_alias }} / {{ result.provider_name }}</span>
         </div>
     </div>
+    {% if fallback_notice %}<p class="notice error">{{ fallback_notice }}</p>{% endif %}
     <p class="muted">消耗 {{ "%.2f"|format(run.total_price_cents / 100) }} 元，{{ run.billed_chars }} 字符</p>
 </section>
 

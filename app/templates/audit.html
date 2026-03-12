@@ -33,6 +33,7 @@
         <label>上传 .docx
             <input type="file" name="upload" accept=".docx,.txt">
         </label>
+        <p class="muted">最大上传 {{ max_upload_mb }} MB，长文稿可能需要 30-60 秒，请勿刷新。</p>
         <label>模型档位
             <select name="model_alias">
                 {% for profile in profiles if profile.alias.startswith("review") %}
