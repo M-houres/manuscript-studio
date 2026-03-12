@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -58,9 +58,9 @@ class Settings:
     session_cookie_max_age: int = int(os.getenv("SESSION_COOKIE_MAX_AGE", "1209600"))
     csrf_enabled: bool = _env_bool("CSRF_ENABLED", True)
     hsts_enabled: bool = _env_bool("HSTS_ENABLED", os.getenv("APP_ENV", "development") == "production")
-    allowed_hosts: list[str] = _env_list("APP_ALLOWED_HOSTS") or ["*"]
-    admin_emails: list[str] = _env_list("ADMIN_EMAILS")
-    super_admin_emails: list[str] = _env_list("SUPER_ADMIN_EMAILS")
+    allowed_hosts: list[str] = field(default_factory=lambda: _env_list("APP_ALLOWED_HOSTS") or ["*"])
+    admin_emails: list[str] = field(default_factory=lambda: _env_list("ADMIN_EMAILS"))
+    super_admin_emails: list[str] = field(default_factory=lambda: _env_list("SUPER_ADMIN_EMAILS"))
 
     app_base_url: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
 
